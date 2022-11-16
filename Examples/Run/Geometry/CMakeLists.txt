@@ -48,6 +48,14 @@ target_link_libraries(
   ActsExampleGeometryTelescope
   PRIVATE ${_common_libraries} ActsExamplesDetectorTelescope)
 
+# MS detector
+add_executable(
+  ActsExampleGeometryMS
+  MSGeometryExample.cpp)
+target_link_libraries(
+  ActsExampleGeometryMS
+  PRIVATE ${_common_libraries} ActsExamplesExperimentalMuon)
+
 install(
   TARGETS
     ActsExampleGeometryEmpty
@@ -55,6 +63,7 @@ install(
     ActsExampleGeometryAligned
     ActsExampleGeometryTGeo
     ActsExampleGeometryTelescope
+    ActsExampleGeometryMS
   RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 add_subdirectory_if(DD4hep ACTS_BUILD_EXAMPLES_DD4HEP)

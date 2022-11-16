@@ -17,6 +17,7 @@
 #include "Acts/Geometry/VolumeBounds.hpp"
 #include "Acts/Material/IVolumeMaterial.hpp"
 #include "Acts/Surfaces/BoundaryCheck.hpp"
+#include "Acts/Utilities/BoundingBox.hpp"
 #include "Acts/Utilities/Delegate.hpp"
 #include "Acts/Utilities/Helpers.hpp"
 
@@ -38,6 +39,8 @@ class Detector;
 /// The Portal genertor definition
 using PortalGenerator = Delegate<std::vector<std::shared_ptr<Portal>>(
     const Transform3&, const VolumeBounds&, std::shared_ptr<DetectorVolume>)>;
+
+using BoundingBox = Acts::AxisAlignedBoundingBox<Acts::Experimental::DetectorVolume, Acts::ActsScalar, 3>;
 
 /// A detector volume description which can be:
 ///
@@ -316,6 +319,8 @@ class DetectorVolume : public std::enable_shared_from_this<DetectorVolume> {
   /// Const access to the detector
   const Detector* detector() const;
 
+  const std::shared_ptr<BoundingBox> getBoundingBox() const;
+
  private:
   /// Internal construction method that calls the portal generator
   ///
@@ -334,6 +339,20 @@ class DetectorVolume : public std::enable_shared_from_this<DetectorVolume> {
   /// @return a boolean indicating if the objects are properly contained
   bool checkContainment(const GeometryContext& gctx, size_t nseg = 1) const;
 
+  ///Get min and maximum vertices for the volume
+  ///
+  /// @param gctx the current geometry context object, e.g. alignment
+  /// @param portal the portals of the volume
+  ///
+  /// @note sets m_minVertex_maxVertex
+  // void getVertices(const GeometryContext& gctx);
+
+  void boundingBox(const GeometryContext& gctx) ;
+
+  /// Retrieve bounding box
+  ///
+  void setBoundingBox(const GeometryContext& gctx);
+
   /// Name of the volume
   std::string m_name = "Unnamed";
 
@@ -351,6 +370,9 @@ class DetectorVolume : public std::enable_shared_from_this<DetectorVolume> {
 
   /// Volume store (internal/external)
   ObjectStore<std::shared_ptr<DetectorVolume>> m_volumes;
+
+  /// BoundingBox
+  std::shared_ptr<BoundingBox> m_boundingBox;
 
   /// The navigation state updator
   ManagedSurfaceCandidatesUpdator m_surfaceCandidatesUpdator;
