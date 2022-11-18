@@ -26,63 +26,18 @@
 #include "nlohmann/json.hpp"
 
 #include "Acts/NavigatorDelegates/MuonDelegate.hpp"
+#include "Acts/Surfaces/StrawSurface.hpp"
 
 
 #include <fstream>
 #include <iostream>
 
 using namespace Acts::Experimental;
-// std::tuple<Acts::Vector3, Acts::Vector3> get_vmin_vmax(const DetectorVolume& detector) {
-//     auto gctx = Acts::GeometryContext();
-//     auto surfaces = detector.portals();
-//     std::vector<Acts::Vector3> vertices;
-
-//     for (auto s : surfaces) {
-//         auto surface = s->surface().polyhedronRepresentation(gctx, 1);
-//         auto vertex = surface.vertices;
-//         for(auto v : vertex){
-//             vertices.push_back(v);
-//         }
-//     }
-
-//     Acts::Vector3 vmin(1e9, 1e9, 1e9);
-//     Acts::Vector3 vmax(-1e9, -1e9, -1e9);
-//     for(auto v : vertices){
-//         vmin = vmin.cwiseMin(v);
-//         vmax = vmax.cwiseMax(v);
-//     }
-//     return std::make_tuple(vmin, vmax);
-// }
-
-// std::vector<std::shared_ptr<BoundingBox>> get_bb(std::vector<std::shared_ptr<BoundingBox>> boxes, const DetectorVolume& detector) {
-//     auto min_max = get_vmin_vmax(detector);
-//     Acts::Vector3 vmin = std::get<0>(min_max);
-//     Acts::Vector3 vmax = std::get<1>(min_max);
-
-//     auto box = BoundingBox(&(detector), vmin, vmax);
-//     auto shared_box = std::make_shared<BoundingBox>(box);
-//     boxes.push_back(shared_box);
-
-//     auto sub_volumes = detector.volumes();
-//     for(auto s_vol: sub_volumes){
-//         auto sub_sub_volumes = s_vol->volumes();
-//         if(sub_sub_volumes.size() != 0){
-//             auto not_needed = get_bb(boxes, *s_vol);
-//         } else {
-//             auto sub_min_max = get_vmin_vmax(*s_vol);
-//             Acts::Vector3 sub_vmin = std::get<0>(sub_min_max);
-//             Acts::Vector3 sub_vmax = std::get<1>(sub_min_max);
-//             auto sub_box = BoundingBox(&(*s_vol), sub_vmin, sub_vmax);
-//             auto sub_shared_box = std::make_shared<BoundingBox>(sub_box);
-//             boxes.push_back(sub_shared_box);
-//         }
-//     }
-//     return boxes;
-// }
-    
 
 std::shared_ptr<DetectorVolume> MuonDetector::build_detector(std::string json_file){
     Acts::GeometryContext tContext;
+    Acts::ObjVisualization3D helper;
+
     nlohmann::json muon_vols;
 
     auto muon_vols_json = std::ifstream(json_file,
@@ -98,8 +53,37 @@ std::shared_ptr<DetectorVolume> MuonDetector::build_detector(std::string json_fi
     auto portalsAndSubPortalsGenerator = detail::defaultPortalAndSubPortalGenerator();
 
 
-    // auto test_file = std::ifstream("/Users/maharris/acts_muon/run/CuboidVolumeBounds.json",
-    //                             std::ifstream::in | std::ifstream::binary);
+    auto test_file = std::ifstream("/Users/maharris/acts_muon/run/CuboidVolumeBounds.json",
+                                std::ifstream::in | std::ifstream::binary);
+
+    auto radius_straw = 10;
+    auto half_length_straw = 2100;
+    // auto translation_straw = Acts::Vector3(0.0, 3109.0, 10130.0);
+
+    std::vector<std::shared_ptr<Acts::Experimental::DetectorVolume>> detector_straws;
+    for(auto i = 0; i < 1700; i = i+20){
+        auto rotation_straw = Acts::RotationMatrix3::Identity();
+        auto transform_straw = Acts::Transform3::Identity();
+        transform_straw.translate(Acts::Vector3(0.0, 3109.0+i, 10130.0));
+        transform_straw.rotate(rotation_straw);
+        auto rotation_straw1 = Acts::RotationMatrix3::Identity();
+        auto transform_straw1 = Acts::Transform3::Identity();
+        transform_straw1.translate(Acts::Vector3(20, 3109.0+i, 10130.0));
+        transform_straw1.rotate(rotation_straw1);
+        auto surface = Acts::CylinderVolumeBounds(0, radius_straw, half_length_straw);
+        auto surface1 = Acts::CylinderVolumeBounds(0, radius_straw, half_length_straw);
+        auto surface_unique = std::make_unique<Acts::CylinderVolumeBounds>(surface);
+        auto surface_unique1 = std::make_unique<Acts::CylinderVolumeBounds>(surface1);
+        auto detector_straw = DetectorVolumeFactory::construct(portalGenerator, tContext,
+            "MS_detector_vol+"+std::to_string(i), transform_straw,
+            std::move(surface_unique), detail::allPortals());
+        auto detector_straw1 = DetectorVolumeFactory::construct(portalGenerator, tContext,
+            "MS_detector_vol1+"+std::to_string(i), transform_straw1,
+            std::move(surface_unique1), detail::allPortals());
+        detector_straws.push_back(detector_straw);
+        detector_straws.push_back(detector_straw1);
+    }
+    int counter = 0;
     
     for(size_t i = 0; i < muon_vols.size(); i++){
         auto transform = Acts::Transform3::Identity();
@@ -123,11 +107,25 @@ std::shared_ptr<DetectorVolume> MuonDetector::build_detector(std::string json_fi
         }
 
         if(muon_vols[i]["type"] == "Cuboid"){
-            auto vol = Acts::volumeBoundsFromJson<Acts::CuboidVolumeBounds>(muon_vols[i]);
-            auto d_vol = DetectorVolumeFactory::construct(portalGenerator, tContext,
-            "MS_detector_vol+"+std::to_string(i), transform,
-            std::move(vol), detail::allPortals());
-            detector_stations.push_back(d_vol);
+            if(counter == 0){
+                auto vol = Acts::volumeBoundsFromJson<Acts::CuboidVolumeBounds>(muon_vols[i]);
+                auto d_vol = DetectorVolumeFactory::construct(portalGenerator, tContext,
+                "MS_detector_vol+"+std::to_string(i), transform,
+                std::move(vol), surfaces, detector_straws, detail::allPortals());
+                detector_stations.push_back(d_vol);
+                counter = counter + 1;
+                Acts::GeometryView3D::drawDetectorVolume(helper, *d_vol, tContext);
+                helper.write("TESTtttt.obj");
+                helper.clear();
+                std::cout << d_vol->volumes().size() << std::endl;
+            }
+            else{ 
+                auto vol = Acts::volumeBoundsFromJson<Acts::CuboidVolumeBounds>(muon_vols[i]);
+                auto d_vol = DetectorVolumeFactory::construct(portalGenerator, tContext,
+                "MS_detector_vol+"+std::to_string(i), transform,
+                std::move(vol), detail::allPortals());
+                detector_stations.push_back(d_vol);
+            }
         } else if(muon_vols[i]["type"] == "Cylinder"){
             auto vol = Acts::volumeBoundsFromJson<Acts::CylinderVolumeBounds>(muon_vols[i]);
             auto d_vol = DetectorVolumeFactory::construct(portalGenerator, tContext,
@@ -135,11 +133,13 @@ std::shared_ptr<DetectorVolume> MuonDetector::build_detector(std::string json_fi
             std::move(vol), detail::allPortals());
             detector_stations.push_back(d_vol);
         } else if(muon_vols[i]["type"] == "Trapezoid"){
+          
             auto vol = Acts::volumeBoundsFromJson<Acts::TrapezoidVolumeBounds>(muon_vols[i]);
             auto d_vol = DetectorVolumeFactory::construct(portalGenerator, tContext,
             "MS_detector_vol+"+std::to_string(i), transform,
             std::move(vol), detail::allPortals());
             detector_stations.push_back(d_vol);
+            
         } else{
             throw std::invalid_argument("Matt, did you forget about: " + std::string(muon_vols[i]["type"]));
         }
@@ -155,17 +155,4 @@ std::shared_ptr<DetectorVolume> MuonDetector::build_detector(std::string json_fi
 void MuonDetector::visualize_detector(Acts::IVisualization3D& helper, std::shared_ptr<DetectorVolume> detector, Acts::GeometryContext tContext){
     Acts::GeometryView3D::drawDetectorVolume(helper, *detector, tContext);
 }     
-
-// std::vector<std::shared_ptr<BoundingBox>> MuonDetector::build_bounding_boxes(std::shared_ptr<DetectorVolume> detector){
-//     std::vector<std::shared_ptr<BoundingBox>> boxes;
-//     auto bounding_boxes = get_bb(boxes, *detector);
-//     return bounding_boxes;
-// }
-
-// std::tuple<std::vector<std::unique_ptr<BoundingBox>>, std::shared_ptr<BoundingBox>> MuonDetector::build_octree(std::vector<BoundingBox*> boxes){
-//     std::vector<std::unique_ptr<BoundingBox>> store;
-//     BoundingBox* top_box = Acts::make_octree(store,boxes,5);
-//     auto top_box_shared = std::make_shared<BoundingBox>(*top_box);
-//     return std::make_tuple(std::move(store), top_box_shared);
-// }
     

@@ -53,10 +53,15 @@ int main(int argc, char* argv[]) {
 
   NavigationState navState;
   navState.currentVolume = &(*MS);
+  // for(auto i = 0; i < 9000; i++){
+  // navState.position = Acts::Vector3(i,i-0.5,i-0.75);
   navState.position = Acts::Vector3(0,0,0);
   navState.direction = Acts::Vector3(2,2,6).normalized();
   auto test = MuonImpl(*MS);
   test.update(gctx, navState);
+  // }
+  
+ 
 
 
   return 0;

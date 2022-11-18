@@ -186,8 +186,8 @@ void Acts::Experimental::DetectorVolume::boundingBox(const GeometryContext& gctx
       vertices.push_back(v);
     }
   }
-  Acts::Vector3 vmin = Acts::Vector3(1e9, 1e9, 1e9);
-  Acts::Vector3 vmax = Acts::Vector3(-1e9, -1e9, -1e9);
+  Acts::Vector3 vmin;
+  Acts::Vector3 vmax;
   for(auto v : vertices){
     vmin = vmin.cwiseMin(v);
     vmax = vmax.cwiseMax(v);

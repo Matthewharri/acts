@@ -22,9 +22,6 @@
 namespace Acts {
 namespace Experimental {
 
-/// @brief The end of world sets the volume pointer of the
-/// navigation state to nullptr, usually indicates the end of
-/// the known world, hence the name
 using Frustum3 = Frustum<ActsScalar, 3, 3>;
 
 struct MuonImpl{
@@ -69,20 +66,20 @@ struct MuonImpl{
             }
         }while(lnode != nullptr);
 
-        std::cout << "candidate portals size: " << candidate_portals.size() << std::endl;
+        // std::cout << "candidate portals size: " << candidate_portals.size() << std::endl;
         return candidate_portals;
     }
 
-    inline void update(const GeometryContext& gctx,
-                            NavigationState& nState) noexcept(false) {
-    
-        ObjVisualization3D helper;
+    //If we want to test other methods for getting candidates, 
+    ///I think we only need to make a new update_candidates function
+    inline void update_candidates(const GeometryContext gctx, NavigationState& nState){
         const Frustum3 frustum(nState.position, nState.direction, M_PI/30);
         auto normals = frustum.normals();
-
-        if((nState.surfaceCandidates.size() == 0) and (std::all_of(normals.begin(), normals.end(), [&nState, &frustum](auto& i) {
+        m_frustum = frustum;
+        //This is a check to make sure we are inside the frustum (probably at origin if we are here)
+        if((std::all_of(normals.begin(), normals.end(), [&nState, &frustum](auto& i) {
             return (nState.position - frustum.origin()).dot(i) >= 0;}))) {
-            auto candidate_portals = search_octree(frustum, get_octree());
+            auto candidate_portals = search_octree(get_frustum(), get_octree());
             //draw candidate_portals
             // for(auto portals : candidate_portals){
             //     for(auto portal : portals){
@@ -91,7 +88,7 @@ struct MuonImpl{
             // }
             // helper.write("testing!.obj");
             // helper.clear();
-            std::cout << "candidate portals size: " << candidate_portals.size() << std::endl;
+            // std::cout << "candidate portals size: " << candidate_portals.size() << std::endl;
             for(auto portals : candidate_portals){
                 for(auto& portal: portals){
                     auto surface_candidate = NavigationState::SurfaceCandidate{
@@ -99,13 +96,30 @@ struct MuonImpl{
                     nState.surfaceCandidates.push_back(*(&surface_candidate));
                 }
             }
-        }   
+        }  
+    } //update_candidates function
 
+    inline void update(const GeometryContext& gctx,
+                            NavigationState& nState) noexcept(false) {
+    
+        ObjVisualization3D helper;
+        //If nState.surfaceCandidates is empty, then we should initalize it by finding the volumse intersected by frustum
+        if((nState.surfaceCandidates.empty())){
+            update_candidates(gctx, nState);
+        }
+
+        //This will retrieve the frustum we have saved and we will check if we are still inside of the frustum
+        auto frustum = get_frustum();
+        auto normals = frustum.normals();
         if( (std::any_of(normals.begin(), normals.end(), [&nState, &frustum](auto& i) {
             return (nState.position - frustum.origin()).dot(i) < 0;})) ) {
                 nState.surfaceCandidates.clear();
                 nState.surfaceCandidate = {};
+                update_candidates(gctx, nState);
+                update(gctx, nState);
+                return;
         } 
+        //If we are inside the frustum, we find the closest surface to our location that is reachable 
         else{
             auto nCandidates = nState.surfaceCandidates;
             for(auto& cand : nCandidates){
@@ -120,21 +134,36 @@ struct MuonImpl{
                 auto a_pathlength = a.objectIntersection.intersection.pathLength;
                 auto b_pathlength = b.objectIntersection.intersection.pathLength;
                 auto a_status = a.objectIntersection.intersection.status;
+                auto b_status = b.objectIntersection.intersection.status;
                 auto reachable = [](Intersection3D::Status status){
                     return status == Intersection3D::Status::reachable;
                 };
                 auto on_surface = [](Intersection3D::Status status){
                     return status == Intersection3D::Status::onSurface;
                 };
-                if(reachable(a_status) or on_surface(a_status)){
-                    return std::abs(a_pathlength) < std::abs(b_pathlength);
-                } else{
-                    return false;
+
+                if((std::abs(a_pathlength) < std::abs(b_pathlength)) and (a_pathlength > 0)){
+                    if(reachable(a_status) or on_surface(a_status)){
+                        return true;
+                    } else{
+                        return false;
+                    }
+                }
+                if(std::abs(a_pathlength) > std::abs(b_pathlength) and (b_pathlength > 0)){
+                    if(reachable(b_status) or on_surface(b_status)){
+                        return false;
+                    } else{
+                        return true;
+                    }
                 }
                 return false;
-        });
 
+            });
+            //The first candidate will be the closest, and reachable candidate, so we set it as the current candidate
             nState.surfaceCandidate = nCandidates.begin();
+            // for(auto cand : nCandidates){
+            //     std::cout << "candidate: " << cand.objectIntersection.intersection.pathLength << " status: " << cand.objectIntersection.intersection.status << std::endl;
+            // }
         }
 
         // nState.surfaceCandidate->objectIntersection.intersection.pathLength = 412;
@@ -143,15 +172,20 @@ struct MuonImpl{
 
         std::cout << "nState.surfaceCandidate: " << nState.surfaceCandidate->objectIntersection.intersection.pathLength << std::endl;
         std::cout << "nState.surfaceCandidate: " << nState.surfaceCandidate->objectIntersection.intersection.status << std::endl;   
-    }
+    } // update function
 
     const BoundingBox* get_octree(){
         return m_octree;
     }
 
+    const Frustum3& get_frustum(){
+        return m_frustum;
+    }
+
     private:
     const BoundingBox* m_octree;
     std::vector<std::unique_ptr<BoundingBox>> m_store;
+    Frustum3 m_frustum = Frustum3(Vector3(0, 0, 0), Vector3(0, 0, 1), M_PI_2);
 };
 
 // inline static ManagedSurfaceCandidatesUpdator MuonDelegate() {
